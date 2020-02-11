@@ -174,7 +174,7 @@
                                 <image>
                                     <name>apps/${project.artifactId}:${project.version}</name>
                                     <build>
-                                        <from>fabric8/java-jboss-openjdk8-jdk</from>
+                                        <from>fabric8/java-centos-openjdk8-jdk</from>
                                         <assembly>
                                             <targetDir>/</targetDir>
                                             <inline>
@@ -187,23 +187,7 @@
                                                         <destName>${project.build.finalName}.${project.packaging}
                                                         </destName>
                                                     </file>
-                                                    <file>
-                                                        <source>${project.artifactId}.xml</source>
-                                                        <outputDirectory>deployments</outputDirectory>
-                                                        <destName>${project.artifactId}.xml</destName>
-                                                    </file>
                                                 </files>
-                                                <fileSet>
-                                                    <directory>src/main/docker</directory>
-                                                    <outputDirectory>opt/jboss/.m2</outputDirectory>
-                                                    <includes>
-                                                        <include>settings.xml</include>
-                                                    </includes>
-                                                </fileSet>
-                                                <fileSet>
-                                                    <directory>../ccd-kjar/target/local-repository/maven</directory>
-                                                    <outputDirectory>opt/jboss/.m2/repository</outputDirectory>
-                                                </fileSet>
                                             </inline>
                                             <user>jboss:jboss:jboss</user>
                                         </assembly>
