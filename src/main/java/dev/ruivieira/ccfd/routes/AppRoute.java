@@ -20,8 +20,10 @@ import java.util.List;
 public class AppRoute extends RouteBuilder {
 
     private static final Logger logger = LoggerFactory.getLogger(AppRoute.class);
-    final ObjectMapper requestMapper = new ObjectMapper();
-    final ObjectMapper responseMapper = new ObjectMapper();
+    private final ObjectMapper requestMapper = new ObjectMapper();
+    private final ObjectMapper responseMapper = new ObjectMapper();
+    private boolean USE_SELDON_TOKEN = false;
+    private String SELDON_TOKEN;
 
     public void configure() {
 
@@ -31,6 +33,7 @@ public class AppRoute extends RouteBuilder {
         final String KAFKA_TOPIC = System.getenv("KAFKA_TOPIC");
         final String KIE_SERVER_URL = System.getenv("KIE_SERVER_URL");
         final String SELDON_URL = System.getenv("SELDON_URL");
+        SELDON_TOKEN = System.getenv("SELDON_TOKEN");
 
         if (BROKER_URL==null) {
             final String message = "No Kafka broker provided";
@@ -56,6 +59,7 @@ public class AppRoute extends RouteBuilder {
             throw new IllegalArgumentException(message);
         }
 
+        USE_SELDON_TOKEN = SELDON_TOKEN != null;
 
 
         from("kafka:" + KAFKA_TOPIC + "?brokers=" + BROKER_URL).routeId("mainRoute")
@@ -81,12 +85,11 @@ public class AppRoute extends RouteBuilder {
 
                     final String JSON = requestMapper.writeValueAsString(requestObject);
 
-//                    if (USE_SELDON_TOKEN) {
-//                        request = request.header("Authorization", "Bearer " + SELDON_TOKEN);
-//                    }
+                    if (USE_SELDON_TOKEN) {
+                        exchange.getOut().setHeader("Authorization", "Bearer " + SELDON_TOKEN);
+                    }
                     exchange.getOut().setBody(JSON);
                 })
-//                .marshal(new JacksonDataFormat())
                 .setHeader(Exchange.HTTP_METHOD, constant("POST"))
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .to(SELDON_URL + "/predict")
@@ -109,6 +112,6 @@ public class AppRoute extends RouteBuilder {
         })
         .choice()
         .when(body().isEqualTo(true)).log("It is true").when(body().isEqualTo(false)).log("It is false");
-        // send to another container appropriately
+        // TODO: send to another container appropriately
     }
 }
