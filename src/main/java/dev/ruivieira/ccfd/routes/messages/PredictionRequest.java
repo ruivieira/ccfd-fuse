@@ -1,31 +1,36 @@
 package dev.ruivieira.ccfd.routes.messages;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonRootName;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.List;
 
-@JsonRootName(value = "data")
 public class PredictionRequest implements Serializable {
 
-    private final List<List<Double>> features;
+    @JsonProperty("data")
+    private PredictionData data = new PredictionData();
 
     public PredictionRequest() {
-        this(new ArrayList<>());
-    }
-
-    public PredictionRequest(List<List<Double>> features) {
-        this.features = features;
-    }
-
-    @JsonProperty("ndarray")
-    public List<List<Double>> getFeatures() {
-        return features;
     }
 
     public void addFeatures(List<Double> features) {
-        this.features.add(features);
+        this.data.getOutcomes().add(features);
+    }
+
+    public final static PredictionRequest fromString(String json) throws IOException {
+        final ObjectMapper mapper = new ObjectMapper();
+        return mapper.readValue(json, PredictionRequest.class);
+    }
+
+    public final static String toJSON(PredictionRequest request) throws JsonProcessingException {
+        final ObjectMapper mapper = new ObjectMapper();
+        return mapper.writeValueAsString(request);
+    }
+
+    public PredictionData getData() {
+        return data;
     }
 }

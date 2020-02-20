@@ -2,6 +2,9 @@ package dev.ruivieira.ccfd.routes.messages;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
 
 @JsonIgnoreProperties(ignoreUnknown=true)
 public class PredictionResponse {
@@ -22,6 +25,11 @@ public class PredictionResponse {
 
     public PredictionResponse() {
 
+    }
+
+    public final static PredictionResponse fromString(String json) throws IOException {
+        final ObjectMapper mapper = new ObjectMapper();
+        return mapper.readValue(json, PredictionResponse.class);
     }
 
 }
