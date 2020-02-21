@@ -9,6 +9,7 @@ import org.apache.camel.Exchange;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class SeldonAggregationStrategy implements AggregationStrategy {
@@ -28,9 +29,19 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
             PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), PredictionResponse.class);
 
             Map<String, Object> mergeResult = new HashMap<>();
-            mergeResult.put("account_id", request.getData().getOutcomes().get(0).get(0).intValue());
-            mergeResult.put("transaction_amount", request.getData().getOutcomes().get(0).get(1));
-            boolean fraudulent = response.getData().getOutcomes().get(0).get(0) >= response.getData().getOutcomes().get(0).get(1);
+            // build KIE server data payload
+            List<Double> features = request.getData().getOutcomes().get(0);
+            mergeResult.put("v3", features.get(0));
+            mergeResult.put("v4", features.get(1));
+            mergeResult.put("v10", features.get(2));
+            mergeResult.put("v11", features.get(3));
+            mergeResult.put("v12", features.get(4));
+            mergeResult.put("v14", features.get(5));
+            mergeResult.put("v17", features.get(6));
+            mergeResult.put("v29", features.get(7));
+
+            List<Double> prediction = response.getData().getOutcomes().get(0);
+            boolean fraudulent = prediction.get(0) <= prediction.get(1);
 
             if (original.getPattern().isOutCapable()) {
                 original.getOut().setBody(mergeResult, Map.class);

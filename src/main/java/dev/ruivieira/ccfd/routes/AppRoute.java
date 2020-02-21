@@ -70,7 +70,7 @@ public class AppRoute extends RouteBuilder {
 
         USE_SELDON_TOKEN = SELDON_TOKEN != null;
 
-        AggregationStrategy seldonStrategy = new SeldonAggregationStrategy();
+        final AggregationStrategy seldonStrategy = new SeldonAggregationStrategy();
 
         from("kafka:" + KAFKA_TOPIC + "?brokers=" + BROKER_URL).routeId("mainRoute")
                 .process(exchange -> {
@@ -78,8 +78,11 @@ public class AppRoute extends RouteBuilder {
                     final List<Double> feature = new ArrayList<>();
                     final String payload = exchange.getIn().getBody().toString();
                     final List<String> kafkaFeatures = parseKafkaPayload(payload);
-                    feature.add(Double.valueOf(kafkaFeatures.get(0)));
-                    feature.add(Double.valueOf(kafkaFeatures.get(30)));
+                    // extract the features of interest
+                    final int[] indices = {3, 4, 10, 11, 12, 14, 17, 29};
+                    for (int index : indices) {
+                        feature.add(Double.parseDouble(kafkaFeatures.get(index)));
+                    }
                     final PredictionRequest requestObject = new PredictionRequest();
                     requestObject.addFeatures(feature);
 
@@ -87,18 +90,20 @@ public class AppRoute extends RouteBuilder {
                         exchange.getOut().setHeader("Authorization", "Bearer " + SELDON_TOKEN);
                     }
                     exchange.getOut().setBody(PredictionRequest.toJSON(requestObject));
-                    System.out.println(PredictionRequest.toJSON(requestObject));
                 })
                 .setHeader(Exchange.HTTP_METHOD, constant("POST"))
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .enrich(SELDON_URL + "/predict", seldonStrategy)
+                .process(exchange -> {
+                    System.out.println(exchange.getIn().getBody(String.class));
+                })
                 .choice()
                 .when(header("fraudulent").isEqualTo(true))
 
                 .marshal(new JacksonDataFormat())
-                .to(KIE_SERVER_URL + "/rest/server/containers/ccd-kjar-1_0-SNAPSHOT/processes/ccd-kjar.CCDProcess/instances")
+                .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances")
                 .otherwise()
                 .marshal(new JacksonDataFormat())
-                .to(KIE_SERVER_URL + "/rest/server/containers/ccd-kjar-1_0-SNAPSHOT/processes/ccd-kjar.CCDProcess/instances");
+                .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances");
     }
 }
