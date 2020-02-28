@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 public class SeldonAggregationStrategy implements AggregationStrategy {
 
@@ -31,6 +32,10 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
             Map<String, Object> mergeResult = new HashMap<>();
             // build KIE server data payload
             List<Double> features = request.getData().getOutcomes().get(0);
+
+            // generate a random custom id
+            mergeResult.put("customer_id", new Random().nextInt(10000));
+            // add selected features from the Kaggle dataset
             mergeResult.put("v3", features.get(0));
             mergeResult.put("v4", features.get(1));
             mergeResult.put("v10", features.get(2));

@@ -2,6 +2,7 @@ package dev.ruivieira.ccfd.routes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import dev.ruivieira.ccfd.routes.messages.NotificationResponse;
 import dev.ruivieira.ccfd.routes.messages.PredictionRequest;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
@@ -13,7 +14,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class AppRoute extends RouteBuilder {
@@ -68,6 +71,10 @@ public class AppRoute extends RouteBuilder {
             throw new IllegalArgumentException(message);
         }
 
+        // TODO: write guards
+        final String CUSTOMER_NOTIFICATION_TOPIC = System.getenv("CUSTOMER_NOTIFICATION_TOPIC");
+        final String CUSTOMER_RESPONSE_TOPIC = System.getenv("CUSTOMER_RESPONSE_TOPIC");
+
         USE_SELDON_TOKEN = SELDON_TOKEN != null;
 
         final AggregationStrategy seldonStrategy = new SeldonAggregationStrategy();
@@ -105,5 +112,20 @@ public class AppRoute extends RouteBuilder {
                 .otherwise()
                 .marshal(new JacksonDataFormat())
                 .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances");
+
+        from("kafka:" + CUSTOMER_NOTIFICATION_TOPIC + "?brokers=" + BROKER_URL).routeId("customerIncoming")
+                .log("${body}");
+
+        from("kafka:" + CUSTOMER_RESPONSE_TOPIC + "?brokers=" + BROKER_URL).routeId("customerResponse")
+                .process(exchange -> {
+                    final String payload = exchange.getIn().getBody(String.class);
+                    ObjectMapper mapper = new ObjectMapper();
+                    NotificationResponse response = mapper.readValue(payload, NotificationResponse.class);
+                    exchange.getOut().setHeader("processId", response.responseId);
+                    exchange.getOut().setBody(response.response);
+                })
+                .marshal(new JacksonDataFormat())
+                .log("${body}")
+                .toD(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/instances/${header.processId}/signal/customerAcknowledgement");
     }
 }
