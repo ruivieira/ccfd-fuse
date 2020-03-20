@@ -14,9 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Component
 public class AppRoute extends RouteBuilder {
@@ -36,6 +34,10 @@ public class AppRoute extends RouteBuilder {
     private final ObjectMapper requestMapper = new ObjectMapper();
     private boolean USE_SELDON_TOKEN = false;
     private String SELDON_TOKEN;
+
+    private static final String SELDON_ENDPOINT_KEY = "SELDON_ENDPOINT";
+    private static final String SELDON_ENDPOINT_DEFAULT = "predict";
+    private String SELDON_ENDPOINT;
 
     public void configure() {
 
@@ -71,6 +73,15 @@ public class AppRoute extends RouteBuilder {
             throw new IllegalArgumentException(message);
         }
 
+        SELDON_ENDPOINT = System.getenv(SELDON_ENDPOINT_KEY);
+
+        if (SELDON_ENDPOINT == null) {
+            logger.debug("Using default Seldon endpoint /predict");
+            SELDON_ENDPOINT = SELDON_ENDPOINT_DEFAULT;
+        } else {
+            logger.debug("Using custom Seldon endpoint " + SELDON_ENDPOINT);
+        }
+
         // TODO: write guards
         final String CUSTOMER_NOTIFICATION_TOPIC = System.getenv("CUSTOMER_NOTIFICATION_TOPIC");
         final String CUSTOMER_RESPONSE_TOPIC = System.getenv("CUSTOMER_RESPONSE_TOPIC");
@@ -100,7 +111,7 @@ public class AppRoute extends RouteBuilder {
                 })
                 .setHeader(Exchange.HTTP_METHOD, constant("POST"))
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
-                .enrich(SELDON_URL + "/predict", seldonStrategy)
+                .enrich(SELDON_URL + "/" + SELDON_ENDPOINT, seldonStrategy)
                 .process(exchange -> {
                     System.out.println(exchange.getIn().getBody(String.class));
                 })
