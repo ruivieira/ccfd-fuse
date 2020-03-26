@@ -14,14 +14,18 @@ public class PredictionData {
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<String> names = new ArrayList<>();
 
+    public void setOutcomes(List<Double> outcomes) {
+        this.outcomes = outcomes;
+    }
+
     @JsonProperty("ndarray")
-    private final List<List<Double>> outcomes = new ArrayList<>();
+    private List<Double> outcomes = new ArrayList<>();
 
     public List<String> getNames() {
         return names;
     }
 
-    public List<List<Double>> getOutcomes() {
+    public List<Double> getOutcomes() {
         return outcomes;
     }
 

@@ -7,13 +7,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class PredictionRequestTest {
 
     @Test
     void fromString() throws IOException {
-        String payload = "{\"data\":{\"ndarray\":[[881.0,47.76]]}}";
+        String payload = "{\"data\":{\"ndarray\":[881.0]}}";
         PredictionRequest request = PredictionRequest.fromString(payload);
         System.out.println(request.getData().getOutcomes());
     }
@@ -24,7 +22,7 @@ class PredictionRequestTest {
         List<Double> features = new ArrayList<>();
         features.add(881.0);
         features.add(47.76);
-        request.addFeatures(features);
+        request.setFeatures(features);
         System.out.println(PredictionRequest.toJSON(request));
     }
 }

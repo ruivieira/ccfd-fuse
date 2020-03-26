@@ -12,28 +12,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class AppRoute extends RouteBuilder {
 
     private static List<String> parseKafkaPayload(String payload) {
-        final ObjectMapper mapper = new ObjectMapper();
-        try {
-            return mapper.readValue(payload, ArrayList.class);
-        } catch (IOException e) {
-            // TODO: user logger. Handle exception
-            e.printStackTrace();
-        }
-        return new ArrayList<>();
+        return Arrays.asList(payload.split(","));
     }
 
     private static final Logger logger = LoggerFactory.getLogger(AppRoute.class);
     private final ObjectMapper requestMapper = new ObjectMapper();
     private boolean USE_SELDON_TOKEN = false;
     private String SELDON_TOKEN;
+
+    private final Boolean USE_SELDON_STANDARD = false;
 
     private static final String SELDON_ENDPOINT_KEY = "SELDON_ENDPOINT";
     private static final String SELDON_ENDPOINT_DEFAULT = "predict";
@@ -91,6 +87,7 @@ public class AppRoute extends RouteBuilder {
         final AggregationStrategy seldonStrategy = new SeldonAggregationStrategy();
 
         from("kafka:" + KAFKA_TOPIC + "?brokers=" + BROKER_URL).routeId("mainRoute")
+                .log("incoming payload: ${body}")
                 .process(exchange -> {
                     // deserialise Kafka message
                     final List<Double> feature = new ArrayList<>();
@@ -101,23 +98,35 @@ public class AppRoute extends RouteBuilder {
                     for (int index : indices) {
                         feature.add(Double.parseDouble(kafkaFeatures.get(index)));
                     }
-                    final PredictionRequest requestObject = new PredictionRequest();
-                    requestObject.addFeatures(feature);
 
+                    String outgoingPayload;
+
+                    if (USE_SELDON_STANDARD) {
+                        final PredictionRequest requestObject = new PredictionRequest();
+                        requestObject.setFeatures(feature);
+                        outgoingPayload = PredictionRequest.toJSON(requestObject);
+                    } else {
+                        outgoingPayload = "{\"strData\":\"";
+
+                        outgoingPayload += feature.stream()
+                                .map(Object::toString)
+                                .collect(Collectors.joining(","));
+                        outgoingPayload += "\"}";
+                    }
+
+                    exchange.getOut().setBody(outgoingPayload);
                     if (USE_SELDON_TOKEN) {
                         exchange.getOut().setHeader("Authorization", "Bearer " + SELDON_TOKEN);
                     }
-                    exchange.getOut().setBody(PredictionRequest.toJSON(requestObject));
+
                 })
+                .log("outgoing payload: ${body}")
                 .setHeader(Exchange.HTTP_METHOD, constant("POST"))
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .enrich(SELDON_URL + "/" + SELDON_ENDPOINT, seldonStrategy)
-                .process(exchange -> {
-                    System.out.println(exchange.getIn().getBody(String.class));
-                })
+                .log("enriched: ${body}")
                 .choice()
                 .when(header("fraudulent").isEqualTo(true))
-
                 .marshal(new JacksonDataFormat())
                 .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances")
                 .otherwise()
