@@ -16,8 +16,8 @@ public class PredictionRequest implements Serializable {
     public PredictionRequest() {
     }
 
-    public void addFeatures(List<Double> features) {
-        this.data.getOutcomes().add(features);
+    public void setFeatures(List<Double> features) {
+        this.data.setOutcomes(features);
     }
 
     public final static PredictionRequest fromString(String json) throws IOException {

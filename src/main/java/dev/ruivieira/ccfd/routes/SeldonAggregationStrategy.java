@@ -6,14 +6,17 @@ import dev.ruivieira.ccfd.routes.messages.PredictionRequest;
 import dev.ruivieira.ccfd.routes.messages.PredictionResponse;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 public class SeldonAggregationStrategy implements AggregationStrategy {
+
+    private static final Logger logger = LoggerFactory.getLogger(SeldonAggregationStrategy.class);
+
+    private final Boolean USE_SELDON_STANDARD = false;
 
     private final ObjectMapper responseMapper = new ObjectMapper();
 
@@ -25,13 +28,25 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
         Object originalBody = original.getIn().getBody();
         Object resourceResponse = resource.getIn().getBody(String.class);
 
+        List<Double> features = new ArrayList<>();
+
         try {
-            PredictionRequest request = PredictionRequest.fromString(originalBody.toString());
+            if (USE_SELDON_STANDARD) {
+                PredictionRequest request = PredictionRequest.fromString(originalBody.toString());
+                // build KIE server data payload
+                features = request.getData().getOutcomes();
+            } else {
+                ObjectMapper requestMapper = new ObjectMapper();
+                Map<String, String> map = requestMapper.readValue(originalBody.toString(), Map.class);
+                String[] featureString = map.get("strData").split(",");
+                for (String f : featureString) {
+                    features.add(Double.parseDouble(f));
+                }
+            }
+
             PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), PredictionResponse.class);
 
             Map<String, Object> mergeResult = new HashMap<>();
-            // build KIE server data payload
-            List<Double> features = request.getData().getOutcomes().get(0);
 
             // generate a random custom id
             mergeResult.put("customer_id", new Random().nextInt(10000));
@@ -45,8 +60,10 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
             mergeResult.put("v17", features.get(6));
             mergeResult.put("v29", features.get(7));
 
-            List<Double> prediction = response.getData().getOutcomes().get(0);
-            boolean fraudulent = prediction.get(0) <= prediction.get(1);
+            logger.info("Merged payload: " + mergeResult.toString());
+
+            List<Double> prediction = response.getData().getOutcomes();
+            boolean fraudulent = prediction.get(0) <= 0.5;
 
             if (original.getPattern().isOutCapable()) {
                 original.getOut().setBody(mergeResult, Map.class);
