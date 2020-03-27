@@ -1,6 +1,7 @@
 package dev.ruivieira.ccfd.routes.messages;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import dev.ruivieira.ccfd.routes.messages.v0.PredictionRequest;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

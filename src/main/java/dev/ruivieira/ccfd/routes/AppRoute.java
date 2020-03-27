@@ -2,8 +2,9 @@ package dev.ruivieira.ccfd.routes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import dev.ruivieira.ccfd.routes.messages.MessageParser;
 import dev.ruivieira.ccfd.routes.messages.NotificationResponse;
-import dev.ruivieira.ccfd.routes.messages.PredictionRequest;
+import dev.ruivieira.ccfd.routes.messages.v1.PredictionRequest;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
@@ -13,27 +14,27 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
 public class AppRoute extends RouteBuilder {
 
-    private static List<String> parseKafkaPayload(String payload) {
-        return Arrays.asList(payload.split(","));
-    }
 
     private static final Logger logger = LoggerFactory.getLogger(AppRoute.class);
     private final ObjectMapper requestMapper = new ObjectMapper();
     private boolean USE_SELDON_TOKEN = false;
     private String SELDON_TOKEN;
 
-    private final Boolean USE_SELDON_STANDARD = false;
+    private final Boolean USE_SELDON_STANDARD;
 
     private static final String SELDON_ENDPOINT_KEY = "SELDON_ENDPOINT";
     private static final String SELDON_ENDPOINT_DEFAULT = "predict";
     private String SELDON_ENDPOINT;
+
+    public AppRoute() {
+        USE_SELDON_STANDARD = System.getenv("SELDON_STANDARD") != null;
+    }
 
     public void configure() {
 
@@ -88,11 +89,19 @@ public class AppRoute extends RouteBuilder {
 
         from("kafka:" + KAFKA_TOPIC + "?brokers=" + BROKER_URL).routeId("mainRoute")
                 .log("incoming payload: ${body}")
+                .to("micrometer:counter:transaction.incoming?increment=1")
                 .process(exchange -> {
                     // deserialise Kafka message
                     final List<Double> feature = new ArrayList<>();
                     final String payload = exchange.getIn().getBody().toString();
-                    final List<String> kafkaFeatures = parseKafkaPayload(payload);
+                    final List<String> kafkaFeatures;
+
+                    if (USE_SELDON_STANDARD) {
+                        kafkaFeatures = MessageParser.parseV0(payload);
+                    } else {
+                        kafkaFeatures = MessageParser.parseV1(payload);
+                    }
+
                     // extract the features of interest
                     final int[] indices = {3, 4, 10, 11, 12, 14, 17, 29};
                     for (int index : indices) {
@@ -103,7 +112,7 @@ public class AppRoute extends RouteBuilder {
 
                     if (USE_SELDON_STANDARD) {
                         final PredictionRequest requestObject = new PredictionRequest();
-                        requestObject.setFeatures(feature);
+                        requestObject.addFeatures(feature);
                         outgoingPayload = PredictionRequest.toJSON(requestObject);
                     } else {
                         outgoingPayload = "{\"strData\":\"";
@@ -121,6 +130,7 @@ public class AppRoute extends RouteBuilder {
 
                 })
                 .log("outgoing payload: ${body}")
+
                 .setHeader(Exchange.HTTP_METHOD, constant("POST"))
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .enrich(SELDON_URL + "/" + SELDON_ENDPOINT, seldonStrategy)
@@ -128,9 +138,11 @@ public class AppRoute extends RouteBuilder {
                 .choice()
                 .when(header("fraudulent").isEqualTo(true))
                 .marshal(new JacksonDataFormat())
+                .to("micrometer:counter:transaction.outgoing?increment=1&tags=type=fraud")
                 .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances")
                 .otherwise()
                 .marshal(new JacksonDataFormat())
+                .to("micrometer:counter:transaction.outgoing?increment=1&tags=type=standard")
                 .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances");
 
         from("kafka:" + CUSTOMER_NOTIFICATION_TOPIC + "?brokers=" + BROKER_URL).routeId("customerIncoming")
