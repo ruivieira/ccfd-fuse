@@ -1,4 +1,4 @@
-package dev.ruivieira.ccfd.routes.messages;
+package dev.ruivieira.ccfd.routes.messages.v1;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -16,8 +16,8 @@ public class PredictionRequest implements Serializable {
     public PredictionRequest() {
     }
 
-    public void setFeatures(List<Double> features) {
-        this.data.setOutcomes(features);
+    public void addFeatures(List<Double> features) {
+        this.data.getOutcomes().add(features);
     }
 
     public final static PredictionRequest fromString(String json) throws IOException {

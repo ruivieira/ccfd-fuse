@@ -1,4 +1,4 @@
-package dev.ruivieira.ccfd.routes.messages;
+package dev.ruivieira.ccfd.routes.messages.v0;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;

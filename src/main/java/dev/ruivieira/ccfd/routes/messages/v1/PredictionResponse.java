@@ -1,8 +1,9 @@
-package dev.ruivieira.ccfd.routes.messages;
+package dev.ruivieira.ccfd.routes.messages.v1;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.ruivieira.ccfd.routes.messages.PredictionMetadata;
 
 import java.io.IOException;
 

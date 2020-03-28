@@ -2,10 +2,11 @@ package dev.ruivieira.ccfd.routes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import dev.ruivieira.ccfd.routes.messages.PredictionRequest;
-import dev.ruivieira.ccfd.routes.messages.PredictionResponse;
+import dev.ruivieira.ccfd.routes.messages.v1.PredictionRequest;
+import dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
+import org.apache.kafka.common.protocol.types.Field;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,11 +17,12 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
     private static final Logger logger = LoggerFactory.getLogger(SeldonAggregationStrategy.class);
 
-    private final Boolean USE_SELDON_STANDARD = false;
+    private Boolean USE_SELDON_STANDARD;
 
     private final ObjectMapper responseMapper = new ObjectMapper();
 
     public SeldonAggregationStrategy() {
+        USE_SELDON_STANDARD = System.getenv("SELDON_STANDARD") != null;
         responseMapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
     }
 
@@ -28,13 +30,14 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
         Object originalBody = original.getIn().getBody();
         Object resourceResponse = resource.getIn().getBody(String.class);
 
+
         List<Double> features = new ArrayList<>();
 
         try {
             if (USE_SELDON_STANDARD) {
                 PredictionRequest request = PredictionRequest.fromString(originalBody.toString());
                 // build KIE server data payload
-                features = request.getData().getOutcomes();
+                features = request.getData().getOutcomes().get(0);
             } else {
                 ObjectMapper requestMapper = new ObjectMapper();
                 Map<String, String> map = requestMapper.readValue(originalBody.toString(), Map.class);
@@ -44,7 +47,16 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
                 }
             }
 
-            PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), PredictionResponse.class);
+            Boolean fraudulent;
+
+            if (USE_SELDON_STANDARD) {
+                dev.ruivieira.ccfd.routes.messages.v1.PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), dev.ruivieira.ccfd.routes.messages.v1.PredictionResponse.class);
+                fraudulent = response.getData().getOutcomes().get(0).get(0) >= response.getData().getOutcomes().get(0).get(1);
+            } else {
+                dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse.class);
+                List<Double> prediction = response.getData().getOutcomes();
+                fraudulent = prediction.get(0) <= 0.5;
+            }
 
             Map<String, Object> mergeResult = new HashMap<>();
 
@@ -62,8 +74,6 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
             logger.info("Merged payload: " + mergeResult.toString());
 
-            List<Double> prediction = response.getData().getOutcomes();
-            boolean fraudulent = prediction.get(0) <= 0.5;
 
             if (original.getPattern().isOutCapable()) {
                 original.getOut().setBody(mergeResult, Map.class);
