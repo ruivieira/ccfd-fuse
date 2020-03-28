@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class RouterServiceConfiguration {
+public class MetricsConfiguration {
 
     @Value("${spring.application.name}")
     String appName;
@@ -40,6 +40,17 @@ public class RouterServiceConfiguration {
             Counter.builder("transaction.outgoing")
                     .tag("type", "standard")
                     .description("Fraudulent transaction sent to KIE server")
+                    .register(registry);
+            Counter.builder("notifications.outgoing")
+                    .description("Outgoing customer notifications")
+                    .register(registry);
+            Counter.builder("notifications.incoming")
+                    .tag("response", "approved")
+                    .description("Customer responses approving transaction")
+                    .register(registry);
+            Counter.builder("notifications.incoming")
+                    .tag("response", "non_approved")
+                    .description("Customer responses disapproving transaction")
                     .register(registry);
         };
 

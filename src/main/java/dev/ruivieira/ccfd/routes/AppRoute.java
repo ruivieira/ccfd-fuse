@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import dev.ruivieira.ccfd.routes.messages.MessageParser;
 import dev.ruivieira.ccfd.routes.messages.NotificationResponse;
 import dev.ruivieira.ccfd.routes.messages.v1.PredictionRequest;
+import io.micrometer.core.instrument.Tags;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jackson.JacksonDataFormat;
+import org.apache.camel.component.micrometer.MicrometerConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -146,7 +148,8 @@ public class AppRoute extends RouteBuilder {
                 .to(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/ccd-fraud-kjar.CCDProcess/instances");
 
         from("kafka:" + CUSTOMER_NOTIFICATION_TOPIC + "?brokers=" + BROKER_URL).routeId("customerIncoming")
-                .log("${body}");
+                .log("${body}")
+                .to("micrometer:counter:notifications.outgoing?increment=1");
 
         from("kafka:" + CUSTOMER_RESPONSE_TOPIC + "?brokers=" + BROKER_URL).routeId("customerResponse")
                 .process(exchange -> {
@@ -155,9 +158,11 @@ public class AppRoute extends RouteBuilder {
                     NotificationResponse response = mapper.readValue(payload, NotificationResponse.class);
                     exchange.getOut().setHeader("processId", response.responseId);
                     exchange.getOut().setBody(response.response);
+                    exchange.getOut().setHeader("response", response.response ? "approved" : "non_approved");
                 })
                 .marshal(new JacksonDataFormat())
                 .log("${body}")
+                .to("micrometer:counter:notifications.incoming?increment=1&tags=response=${header.response}")
                 .toD(KIE_SERVER_URL + "/rest/server/containers/ccd-fraud-kjar-1_0-SNAPSHOT/processes/instances/${header.processId}/signal/customerAcknowledgement");
     }
 }
