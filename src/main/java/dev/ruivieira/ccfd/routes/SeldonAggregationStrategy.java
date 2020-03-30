@@ -3,10 +3,8 @@ package dev.ruivieira.ccfd.routes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import dev.ruivieira.ccfd.routes.messages.v1.PredictionRequest;
-import dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
-import org.apache.kafka.common.protocol.types.Field;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +18,7 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
     private Boolean USE_SELDON_STANDARD;
 
     private final ObjectMapper responseMapper = new ObjectMapper();
+
 
     public SeldonAggregationStrategy() {
         USE_SELDON_STANDARD = System.getenv("SELDON_STANDARD") != null;
@@ -47,16 +46,19 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
                 }
             }
 
-            Boolean fraudulent;
-
+            boolean fraudulent;
+            Double probability;
             if (USE_SELDON_STANDARD) {
                 dev.ruivieira.ccfd.routes.messages.v1.PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), dev.ruivieira.ccfd.routes.messages.v1.PredictionResponse.class);
+                probability = response.getData().getOutcomes().get(0).get(0);
                 fraudulent = response.getData().getOutcomes().get(0).get(0) >= response.getData().getOutcomes().get(0).get(1);
             } else {
                 dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse.class);
                 List<Double> prediction = response.getData().getOutcomes();
+                probability = prediction.get(0);
                 fraudulent = prediction.get(0) <= 0.5;
             }
+
 
             Map<String, Object> mergeResult = new HashMap<>();
 
@@ -71,9 +73,10 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
             mergeResult.put("v14", features.get(5));
             mergeResult.put("v17", features.get(6));
             mergeResult.put("v29", features.get(7));
+            mergeResult.put("fraud_probability", probability);
+            mergeResult.put("amount", original.getIn().getHeader("amount"));
 
             logger.info("Merged payload: " + mergeResult.toString());
-
 
             if (original.getPattern().isOutCapable()) {
                 original.getOut().setBody(mergeResult, Map.class);
