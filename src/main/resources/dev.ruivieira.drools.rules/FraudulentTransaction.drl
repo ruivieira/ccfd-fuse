@@ -1,8 +1,8 @@
 package dev.ruivieira.drools.rules;
 
-import dev.ruivieira.ccfd.routes.messages.Prediction;
+import dev.ruivieira.ccfd.routes.model.Prediction;
 
-global dev.ruivieira.ccfd.routes.messages.Classification classification;
+global dev.ruivieira.ccfd.routes.model.Classification classification;
 
 dialect  "mvel"
 
