@@ -3,8 +3,14 @@ package dev.ruivieira.ccfd.routes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import dev.ruivieira.ccfd.routes.messages.v1.PredictionRequest;
+import dev.ruivieira.ccfd.routes.model.Classification;
+import dev.ruivieira.ccfd.routes.model.Prediction;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
+import org.kie.api.KieServices;
+import org.kie.api.runtime.KieContainer;
+import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.StatelessKieSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,10 +25,15 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
     private final ObjectMapper responseMapper = new ObjectMapper();
 
+    private KieSession kieSession;
 
     public SeldonAggregationStrategy() {
         USE_SELDON_STANDARD = System.getenv("SELDON_STANDARD") != null;
         responseMapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
+
+        KieServices kieServices = KieServices.Factory.get();
+        KieContainer kContainer = kieServices.getKieClasspathContainer();
+        kieSession = kContainer.newKieSession();
     }
 
     public Exchange aggregate(Exchange original, Exchange resource) {
@@ -46,19 +57,22 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
                 }
             }
 
-            boolean fraudulent;
-            Double probability;
+
+            Prediction prediction = new Prediction();
+
             if (USE_SELDON_STANDARD) {
                 dev.ruivieira.ccfd.routes.messages.v1.PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), dev.ruivieira.ccfd.routes.messages.v1.PredictionResponse.class);
-                probability = response.getData().getOutcomes().get(0).get(0);
-                fraudulent = response.getData().getOutcomes().get(0).get(0) >= response.getData().getOutcomes().get(0).get(1);
+                prediction.setProbability(response.getData().getOutcomes().get(0).get(0));
             } else {
                 dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse response = responseMapper.readValue(resourceResponse.toString(), dev.ruivieira.ccfd.routes.messages.v0.PredictionResponse.class);
-                List<Double> prediction = response.getData().getOutcomes();
-                probability = prediction.get(0);
-                fraudulent = prediction.get(0) <= 0.5;
+                List<Double> predictionList = response.getData().getOutcomes();
+                prediction.setProbability(predictionList.get(0));
             }
 
+            Classification classification = new Classification();
+            kieSession.setGlobal("classification", classification);
+            kieSession.insert(prediction);
+            kieSession.fireAllRules();
 
             Map<String, Object> mergeResult = new HashMap<>();
 
@@ -73,17 +87,17 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
             mergeResult.put("v14", features.get(5));
             mergeResult.put("v17", features.get(6));
             mergeResult.put("v29", features.get(7));
-            mergeResult.put("fraud_probability", probability);
+            mergeResult.put("fraud_probability", prediction.getProbability());
             mergeResult.put("amount", original.getIn().getHeader("amount"));
 
             logger.info("Merged payload: " + mergeResult.toString());
 
             if (original.getPattern().isOutCapable()) {
                 original.getOut().setBody(mergeResult, Map.class);
-                original.getOut().setHeader("fraudulent", fraudulent);
+                original.getOut().setHeader("fraudulent", classification.isFraudulent());
             } else {
                 original.getIn().setBody(mergeResult, Map.class);
-                original.getIn().setHeader("fraudulent", fraudulent);
+                original.getIn().setHeader("fraudulent", classification.isFraudulent());
             }
 
         } catch (IOException e) {
