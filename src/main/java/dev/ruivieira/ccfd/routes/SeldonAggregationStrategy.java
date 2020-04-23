@@ -10,7 +10,6 @@ import org.apache.camel.Exchange;
 import org.kie.api.KieServices;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.StatelessKieSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +26,8 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
     private KieSession kieSession;
 
+    final String FRAUDULENT_HEADER = "fraudulent";
+
     public SeldonAggregationStrategy() {
         USE_SELDON_STANDARD = System.getenv("SELDON_STANDARD") != null;
         responseMapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
@@ -37,8 +38,8 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
     }
 
     public Exchange aggregate(Exchange original, Exchange resource) {
-        Object originalBody = original.getIn().getBody();
-        Object resourceResponse = resource.getIn().getBody(String.class);
+        final Object originalBody = original.getIn().getBody();
+        final Object resourceResponse = resource.getIn().getBody(String.class);
 
 
         List<Double> features = new ArrayList<>();
@@ -69,15 +70,16 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
                 prediction.setProbability(predictionList.get(0));
             }
 
-            Classification classification = new Classification();
+            final Classification classification = new Classification();
             kieSession.setGlobal("classification", classification);
             kieSession.insert(prediction);
             kieSession.fireAllRules();
 
-            Map<String, Object> mergeResult = new HashMap<>();
+            final Map<String, Object> mergeResult = new HashMap<>();
 
-            // generate a random custom id
+            // generate a random customer id, since this is not available in the original dataset
             mergeResult.put("customer_id", new Random().nextInt(10000));
+
             // add selected features from the Kaggle dataset
             mergeResult.put("v3", features.get(0));
             mergeResult.put("v4", features.get(1));
@@ -92,16 +94,19 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
             logger.info("Merged payload: " + mergeResult.toString());
 
+
+
             if (original.getPattern().isOutCapable()) {
                 original.getOut().setBody(mergeResult, Map.class);
-                original.getOut().setHeader("fraudulent", classification.isFraudulent());
+                original.getOut().setHeader(FRAUDULENT_HEADER, classification.isFraudulent());
             } else {
                 original.getIn().setBody(mergeResult, Map.class);
-                original.getIn().setHeader("fraudulent", classification.isFraudulent());
+                original.getIn().setHeader(FRAUDULENT_HEADER, classification.isFraudulent());
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error("Not possible to merge payload with prediction");
+            logger.error(e.getMessage());
         }
 
         return original;
