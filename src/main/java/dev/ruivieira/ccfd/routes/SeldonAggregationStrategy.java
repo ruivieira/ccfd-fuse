@@ -21,6 +21,7 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
     private static final Logger logger = LoggerFactory.getLogger(SeldonAggregationStrategy.class);
 
     private Boolean USE_SELDON_STANDARD;
+    private final Double FRAUD_THRESHOLD;
 
     private final ObjectMapper responseMapper = new ObjectMapper();
 
@@ -30,6 +31,17 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
     public SeldonAggregationStrategy() {
         USE_SELDON_STANDARD = System.getenv("SELDON_STANDARD") != null;
+
+        final String FRAUD_THRESHOLD_ENV = System.getenv("FRAUD_THRESHOLD");
+
+        if (FRAUD_THRESHOLD_ENV==null) {
+            FRAUD_THRESHOLD = 0.5;
+        } else {
+            FRAUD_THRESHOLD = Double.valueOf(FRAUD_THRESHOLD_ENV);
+        }
+
+        logger.info("Using a fraud threshold of " + FRAUD_THRESHOLD);
+
         responseMapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
 
         KieServices kieServices = KieServices.Factory.get();
@@ -72,6 +84,7 @@ public class SeldonAggregationStrategy implements AggregationStrategy {
 
             final Classification classification = new Classification();
             kieSession.setGlobal("classification", classification);
+            kieSession.setGlobal("threshold", FRAUD_THRESHOLD);
             kieSession.insert(prediction);
             kieSession.fireAllRules();
 

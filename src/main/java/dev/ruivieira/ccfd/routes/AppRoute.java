@@ -125,7 +125,7 @@ public class AppRoute extends RouteBuilder {
                 .otherwise()
                 .marshal(new JacksonDataFormat())
                 .to("micrometer:counter:transaction.outgoing?increment=1&tags=type=standard")
-                .to(KIE_SERVER_URL + "/rest/server/containers/" + STANDARD_PROCESS_CONTAINER + "/processes/ccd-fraud-kjar.CCDProcess/instances");
+                .to(KIE_SERVER_URL + "/rest/server/containers/" + STANDARD_PROCESS_CONTAINER + "/processes/ccd-standard-kjar.CCDProcess/instances");
 
         from("kafka:" + CUSTOMER_NOTIFICATION_TOPIC + "?brokers=" + BROKER_URL).routeId("customerIncoming")
                 .log("${body}")
